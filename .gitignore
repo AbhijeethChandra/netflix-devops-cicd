@@ -1,0 +1,33 @@
+# Node
+node_modules/
+dist/
+
+# Backend build
+netflix-backend/dist/
+
+# Frontend build
+netflix-frontend/dist/
+
+# Java / Maven
+target/
+*.class
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Docker volumes
+mongo-data/
+**/mongo-data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

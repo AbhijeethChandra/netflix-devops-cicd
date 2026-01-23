@@ -1,0 +1,33 @@
+services:
+  mongo:
+    image: mongo:6
+    container_name: netflix-mongo-dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build:
+      context: ./netflix-backend
+      dockerfile: Dockerfile
+    container_name: netflix-backend-dev
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./netflix-backend/.env
+    depends_on:
+      - mongo
+
+  frontend:
+    build:
+      context: ./netflix-frontend
+      dockerfile: Dockerfile
+    container_name: netflix-frontend-dev
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
