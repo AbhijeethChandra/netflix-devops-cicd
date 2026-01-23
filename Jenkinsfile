@@ -2,105 +2,88 @@ pipeline {
     agent any
 
     environment {
-        // SonarQube server name configured in Jenkins
-        SONARQUBE_ENV = 'sonarqube'
-
-        // Docker compose files
-        DEV_COMPOSE  = 'docker-compose.dev.yml'
-        PROD_COMPOSE = 'docker-compose.prod.yml'
-
-        // Selenium project path
-        SELENIUM_DIR = 'selenium-devops-demo/selenium-demo'
+        APP_NAME = "netflix"
+        DEV_COMPOSE = "docker-compose.dev.yml"
+        PROD_COMPOSE = "docker-compose.prod.yml"
+        SONAR_PROJECT_KEY = "netflix-devops-cicd"
+        SONAR_HOST_URL = "http://localhost:9000"
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                echo '📥 Checking out source code'
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/AbhijeethChandra/netflix-devops-cicd.git'
             }
         }
 
-        stage('Build Backend & Frontend Images') {
+        stage('Build Frontend') {
             steps {
-                echo '🐳 Building Docker images'
-                sh '''
-                  docker-compose -f ${DEV_COMPOSE} build --no-cache
-                  docker-compose -f ${PROD_COMPOSE} build --no-cache
-                '''
+                dir('netflix-frontend') {
+                    sh 'npm install'
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Build Backend') {
+            steps {
+                dir('netflix-backend') {
+                    sh 'npm install'
+                }
             }
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                echo '🔍 Running SonarQube Analysis'
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh '''
-                      sonar-scanner \
-                        -Dsonar.projectKey=netflix-backend \
-                        -Dsonar.projectName=netflix-backend \
-                        -Dsonar.sources=netflix-backend/src \
-                        -Dsonar.host.url=http://localhost:9000
-
-                      sonar-scanner \
-                        -Dsonar.projectKey=netflix-frontend \
-                        -Dsonar.projectName=netflix-frontend \
-                        -Dsonar.sources=netflix-frontend/src \
-                        -Dsonar.host.url=http://localhost:9000
-                    '''
-                }
+            environment {
+                SONAR_TOKEN = credentials('sonarqube-token')
             }
-        }
-
-        stage('Quality Gate') {
             steps {
-                echo '🚦 Waiting for SonarQube Quality Gate'
-                timeout(time: 2, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Deploy DEV Environment') {
-            steps {
-                echo '🚀 Deploying DEV environment'
-                sh '''
-                  docker-compose -f ${DEV_COMPOSE} up -d
-                '''
+                sh """
+                sonar-scanner \
+                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                -Dsonar.sources=. \
+                -Dsonar.host.url=${SONAR_HOST_URL} \
+                -Dsonar.login=${SONAR_TOKEN}
+                """
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
-                echo '🧪 Running Selenium UI Tests'
-                dir("${SELENIUM_DIR}") {
-                    sh '''
-                      mvn clean test
-                    '''
+                dir('selenium-demo') {
+                    sh 'mvn clean test'
                 }
             }
         }
 
-        stage('Deploy PROD Environment') {
+        stage('Deploy DEV') {
+            when {
+                branch 'main'
+            }
             steps {
-                echo '🚀 Deploying PROD environment'
-                sh '''
-                  docker-compose -f ${PROD_COMPOSE} up -d
-                '''
+                sh "docker-compose -f ${DEV_COMPOSE} up -d --build"
+            }
+        }
+
+        stage('Deploy PROD') {
+            input {
+                message "Deploy to PROD?"
+                ok "Deploy"
+            }
+            steps {
+                sh "docker-compose -f ${PROD_COMPOSE} up -d --build"
             }
         }
     }
 
     post {
         success {
-            echo '✅ PIPELINE SUCCESS: Build, Test, Quality & Deploy completed'
+            echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo '❌ PIPELINE FAILED: Check logs'
-        }
-        always {
-            echo '📊 Pipeline execution finished'
+            echo "❌ Pipeline failed"
         }
     }
 }
