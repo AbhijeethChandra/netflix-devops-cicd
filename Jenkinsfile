@@ -2,27 +2,24 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "netflix"
-        DEV_COMPOSE = "docker-compose.dev.yml"
+        DEV_COMPOSE  = "docker-compose.dev.yml"
         PROD_COMPOSE = "docker-compose.prod.yml"
-        SONAR_PROJECT_KEY = "netflix-devops-cicd"
-        SONAR_HOST_URL = "http://localhost:9000"
+        SONAR_HOST   = "http://localhost:9000"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/AbhijeethChandra/netflix-devops-cicd.git'
+                checkout scm
             }
         }
 
         stage('Build Frontend') {
             steps {
                 dir('netflix-frontend') {
-                    sh 'npm install'
-                    sh 'npm run build'
+                    bat 'npm install'
+                    bat 'npm run build'
                 }
             }
         }
@@ -30,60 +27,55 @@ pipeline {
         stage('Build Backend') {
             steps {
                 dir('netflix-backend') {
-                    sh 'npm install'
+                    bat 'npm install'
+                    bat 'npm run build'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
-            environment {
-                SONAR_TOKEN = credentials('sonarqube-token')
-            }
             steps {
-                sh """
-                sonar-scanner \
-                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                -Dsonar.sources=. \
-                -Dsonar.host.url=${SONAR_HOST_URL} \
-                -Dsonar.login=${SONAR_TOKEN}
-                """
+                withSonarQubeEnv('sonarqube') {
+                    bat '''
+                    mvn sonar:sonar ^
+                    -Dsonar.projectKey=netflix-devops ^
+                    -Dsonar.projectName=Netflix-DevOps ^
+                    -Dsonar.host.url=%SONAR_HOST%
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy DEV') {
+            steps {
+                bat "docker-compose -f %DEV_COMPOSE% up -d --build"
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
                 dir('selenium-demo') {
-                    sh 'mvn clean test'
+                    bat 'mvn clean test'
                 }
             }
         }
 
-        stage('Deploy DEV') {
+        stage('Deploy PROD') {
             when {
                 branch 'main'
             }
             steps {
-                sh "docker-compose -f ${DEV_COMPOSE} up -d --build"
-            }
-        }
-
-        stage('Deploy PROD') {
-            input {
-                message "Deploy to PROD?"
-                ok "Deploy"
-            }
-            steps {
-                sh "docker-compose -f ${PROD_COMPOSE} up -d --build"
+                bat "docker-compose -f %PROD_COMPOSE% up -d --build"
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline completed successfully"
+            echo '✅ Pipeline completed successfully'
         }
         failure {
-            echo "❌ Pipeline failed"
+            echo '❌ Pipeline failed'
         }
     }
 }
