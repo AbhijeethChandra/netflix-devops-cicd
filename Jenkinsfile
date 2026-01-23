@@ -35,7 +35,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
+                withSonarQubeEnv('SonarQube') {
                     bat '''
                     mvn sonar:sonar ^
                     -Dsonar.projectKey=netflix-devops ^
