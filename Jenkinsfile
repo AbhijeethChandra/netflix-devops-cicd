@@ -1,8 +1,12 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'node-lts'   // must match Jenkins Global Tool name
+    }
+
     environment {
-        SONAR_SCANNER = tool 'SonarScanner'
+        SONARQUBE_ENV = 'SonarQube'   // Jenkins SonarQube config name
     }
 
     stages {
@@ -33,15 +37,16 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
                     dir('netflix-backend') {
-                        bat """
-                        %SONAR_SCANNER%/bin/sonar-scanner ^
+                        bat '''
+                        sonar-scanner ^
                         -Dsonar.projectKey=netflix-backend ^
                         -Dsonar.projectName=netflix-backend ^
                         -Dsonar.sources=src ^
+                        -Dsonar.language=ts ^
                         -Dsonar.sourceEncoding=UTF-8
-                        """
+                        '''
                     }
                 }
             }
@@ -55,24 +60,23 @@ pipeline {
 
         stage('Selenium UI Tests') {
             steps {
-                dir('selenium-devops-demo/selenium-demo') {
+                dir('selenium-demo') {
                     bat 'mvn clean test'
                 }
             }
         }
 
         stage('Deploy PROD') {
+            when {
+                branch 'main'
+            }
             steps {
-                input message: 'Approve PROD deployment?'
                 bat 'docker-compose -f docker-compose.prod.yml up -d --build'
             }
         }
     }
 
     post {
-        always {
-            echo 'Pipeline finished'
-        }
         success {
             echo 'Pipeline SUCCESS'
         }
