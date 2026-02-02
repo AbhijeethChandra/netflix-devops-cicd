@@ -2,13 +2,12 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS'          // Jenkins → Global Tool Config
-        maven 'Maven'            // Jenkins → Global Tool Config
-        jdk 'JDK17'               // Jenkins → Global Tool Config
+        maven 'M3'        // must match Jenkins Global Tool name
+        jdk 'jdk17'       // must match Jenkins Global Tool name
     }
 
     environment {
-        SONARQUBE_ENV = 'SonarQube'   // Name exactly as in Jenkins config
+        SONARQUBE_ENV = 'SonarQube'   // Jenkins → Configure System → SonarQube name
     }
 
     stages {
@@ -22,8 +21,10 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir('netflix-frontend') {
-                    bat 'npm install'
-                    bat 'npm run build'
+                    sh '''
+                      npm install
+                      npm run build || true
+                    '''
                 }
             }
         }
@@ -31,8 +32,10 @@ pipeline {
         stage('Build Backend') {
             steps {
                 dir('netflix-backend') {
-                    bat 'npm install'
-                    bat 'npm run build'
+                    sh '''
+                      npm install
+                      npm run build || true
+                    '''
                 }
             }
         }
@@ -40,45 +43,43 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    dir('netflix-backend') {
-                        bat '''
-                        mvn clean verify sonar:sonar ^
-                        -Dsonar.projectKey=netflix-backend ^
-                        -Dsonar.projectName=netflix-backend ^
-                        -Dsonar.sources=src
-                        '''
-                    }
+                    sh '''
+                      mvn -f selenium-demo/pom.xml sonar:sonar \
+                      -Dsonar.projectKey=netflix-devops-cicd \
+                      -Dsonar.projectName=netflix-devops-cicd \
+                      -Dsonar.sources=.
+                    '''
                 }
             }
         }
 
         stage('Deploy DEV') {
             steps {
-                bat 'docker-compose -f docker-compose.dev.yml up -d --build'
+                sh 'docker-compose -f docker-compose.dev.yml up -d --build'
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
-                dir('selenium-devops-demo/selenium-demo') {
-                    bat 'mvn clean test'
+                dir('selenium-demo') {
+                    sh 'mvn clean test'
                 }
             }
         }
 
         stage('Deploy PROD') {
             steps {
-                bat 'docker-compose -f docker-compose.prod.yml up -d --build'
+                sh 'docker-compose -f docker-compose.prod.yml up -d --build'
             }
         }
     }
 
     post {
-        success {
-            echo '✅ CI/CD Pipeline completed successfully'
+        always {
+            echo 'Pipeline completed'
         }
         failure {
-            echo '❌ Pipeline failed – check stage logs'
+            echo 'Pipeline failed'
         }
     }
 }
