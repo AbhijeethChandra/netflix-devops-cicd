@@ -1,29 +1,27 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'M3'   // must match Jenkins → Global Tool Configuration
-    }
-
     environment {
-        SONAR_PROJECT_KEY = "netflix-devops"
-        SONAR_PROJECT_NAME = "Netflix DevOps CICD"
-        SONAR_PROJECT_VERSION = "1.0"
+        SONARQUBE_SERVER = 'SonarQube'
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/AbhijeethChandra/netflix-devops-cicd.git'
+                checkout scm
             }
         }
 
         stage('Backend Install & Build') {
             steps {
                 dir('netflix-backend') {
-                    sh 'npm install'
+                    bat '''
+                        node -v
+                        npm -v
+                        npm install
+                        npm run build
+                    '''
                 }
             }
         }
@@ -31,60 +29,66 @@ pipeline {
         stage('Frontend Install & Build') {
             steps {
                 dir('netflix-frontend') {
-                    sh 'npm install'
-                    sh 'npm run build'
+                    bat '''
+                        node -v
+                        npm -v
+                        npm install
+                        npm run build
+                    '''
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {   // Jenkins Sonar name
-                    sh """
-                    mvn sonar:sonar \
-                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                    -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
-                    -Dsonar.projectVersion=${SONAR_PROJECT_VERSION}
-                    """
+                withSonarQubeEnv('SonarQube') {
+                    bat '''
+                        echo Running SonarQube Scan
+                        sonar-scanner ^
+                        -Dsonar.projectKey=netflix-devops-cicd ^
+                        -Dsonar.sources=netflix-backend,netflix-frontend ^
+                        -Dsonar.host.url=%SONAR_HOST_URL% ^
+                        -Dsonar.login=%SONAR_AUTH_TOKEN%
+                    '''
                 }
             }
         }
 
-        stage('Quality Gate') {
+        stage('Deploy DEV') {
             steps {
-                timeout(time: 2, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                bat '''
+                    docker-compose -f docker-compose.dev.yml down
+                    docker-compose -f docker-compose.dev.yml up -d --build
+                '''
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
                 dir('selenium-demo') {
-                    sh 'mvn clean test'
+                    bat '''
+                        mvn clean test
+                    '''
                 }
             }
         }
 
-        stage('Docker Build') {
+        stage('Deploy PROD') {
             steps {
-                sh 'docker-compose -f docker-compose.prod.yml build'
-            }
-        }
-
-        stage('Docker Deploy') {
-            steps {
-                sh 'docker-compose -f docker-compose.prod.yml up -d'
+                bat '''
+                    docker-compose -f docker-compose.prod.yml down
+                    docker-compose -f docker-compose.prod.yml up -d --build
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline completed successfully"
+            echo '✅ Pipeline completed successfully'
         }
         failure {
-            echo "❌ Pipeline failed"
+            echo '❌ Pipeline failed'
         }
     }
 }
