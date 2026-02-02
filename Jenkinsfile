@@ -2,14 +2,12 @@ pipeline {
     agent any
 
     environment {
-        DEV_COMPOSE  = "docker-compose.dev.yml"
-        PROD_COMPOSE = "docker-compose.prod.yml"
-        SONAR_HOST   = "http://localhost:9000"
+        SONAR_SCANNER = tool 'SonarScanner'
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
                 checkout scm
             }
@@ -36,46 +34,50 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    bat '''
-                    mvn sonar:sonar ^
-                    -Dsonar.projectKey=netflix-devops ^
-                    -Dsonar.projectName=Netflix-DevOps ^
-                    -Dsonar.host.url=%SONAR_HOST%
-                    '''
+                    dir('netflix-backend') {
+                        bat """
+                        %SONAR_SCANNER%/bin/sonar-scanner ^
+                        -Dsonar.projectKey=netflix-backend ^
+                        -Dsonar.projectName=netflix-backend ^
+                        -Dsonar.sources=src ^
+                        -Dsonar.sourceEncoding=UTF-8
+                        """
+                    }
                 }
             }
         }
 
         stage('Deploy DEV') {
             steps {
-                bat "docker-compose -f %DEV_COMPOSE% up -d --build"
+                bat 'docker-compose -f docker-compose.dev.yml up -d --build'
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
-                dir('selenium-demo') {
+                dir('selenium-devops-demo/selenium-demo') {
                     bat 'mvn clean test'
                 }
             }
         }
 
         stage('Deploy PROD') {
-            when {
-                branch 'main'
-            }
             steps {
-                bat "docker-compose -f %PROD_COMPOSE% up -d --build"
+                input message: 'Approve PROD deployment?'
+                bat 'docker-compose -f docker-compose.prod.yml up -d --build'
             }
         }
     }
 
     post {
+        always {
+            echo 'Pipeline finished'
+        }
         success {
-            echo '✅ Pipeline completed successfully'
+            echo 'Pipeline SUCCESS'
         }
         failure {
-            echo '❌ Pipeline failed'
+            echo 'Pipeline FAILED'
         }
     }
 }
