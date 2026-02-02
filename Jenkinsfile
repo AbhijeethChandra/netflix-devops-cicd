@@ -2,14 +2,12 @@ pipeline {
     agent any
 
     tools {
-        maven 'maven-3'
-        jdk 'jdk-11'
+        maven 'M3'
+        jdk 'jdk17'
     }
 
     environment {
-        SONAR_PROJECT_KEY = "netflix-devops-cicd"
-        SONAR_PROJECT_NAME = "netflix-devops-cicd"
-        SONAR_HOST_URL = "http://localhost:9000"
+        NODE_ENV = 'production'
     }
 
     stages {
@@ -24,8 +22,6 @@ pipeline {
             steps {
                 dir('netflix-frontend') {
                     sh '''
-                      node -v
-                      npm -v
                       npm install
                       npm run build
                     '''
@@ -38,7 +34,7 @@ pipeline {
                 dir('netflix-backend') {
                     sh '''
                       npm install
-                      npm run build || echo "No build script, skipping"
+                      npm run build
                     '''
                 }
             }
@@ -47,11 +43,15 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                      mvn sonar:sonar \
-                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.projectName=${SONAR_PROJECT_NAME}
-                    '''
+                    dir('netflix-backend') {
+                        sh '''
+                          mvn sonar:sonar \
+                          -Dsonar.projectKey=netflix-backend \
+                          -Dsonar.projectName=netflix-backend \
+                          -Dsonar.sources=src \
+                          -Dsonar.host.url=http://localhost:9000
+                        '''
+                    }
                 }
             }
         }
@@ -68,17 +68,12 @@ pipeline {
         stage('Selenium UI Tests') {
             steps {
                 dir('selenium-devops-demo/selenium-demo') {
-                    sh '''
-                      mvn clean test
-                    '''
+                    sh 'mvn clean test'
                 }
             }
         }
 
         stage('Deploy PROD') {
-            when {
-                branch 'main'
-            }
             steps {
                 sh '''
                   docker-compose -f docker-compose.prod.yml down
@@ -90,10 +85,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ CI/CD Pipeline completed successfully'
+            echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo '❌ Pipeline failed – check logs'
+            echo "❌ Pipeline failed – check stage logs"
         }
     }
 }
