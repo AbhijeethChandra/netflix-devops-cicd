@@ -2,77 +2,89 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS'        // Jenkins → Global Tool Config → NodeJS
-        maven 'Maven'          // Jenkins → Global Tool Config → Maven
+        maven 'M3'   // must match Jenkins → Global Tool Configuration
     }
 
     environment {
-        SONARQUBE_SERVER = 'SonarQube'   // Jenkins → SonarQube installations name
+        SONAR_PROJECT_KEY = "netflix-devops"
+        SONAR_PROJECT_NAME = "Netflix DevOps CICD"
+        SONAR_PROJECT_VERSION = "1.0"
     }
 
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout Code') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/AbhijeethChandra/netflix-devops-cicd.git'
             }
         }
 
-        stage('Build Frontend') {
+        stage('Backend Install & Build') {
             steps {
-                dir('netflix-frontend') {
-                    bat 'npm install'
-                    bat 'npm run build'
+                dir('netflix-backend') {
+                    sh 'npm install'
                 }
             }
         }
 
-        stage('Build Backend') {
+        stage('Frontend Install & Build') {
             steps {
-                dir('netflix-backend') {
-                    bat 'npm install'
-                    bat 'npm run build'
+                dir('netflix-frontend') {
+                    sh 'npm install'
+                    sh 'npm run build'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_SERVER}") {
-                    bat '''
-                    mvn -f selenium-demo/pom.xml clean verify sonar:sonar ^
-                    -Dsonar.projectKey=netflix-devops-cicd ^
-                    -Dsonar.projectName=netflix-devops-cicd
-                    '''
+                withSonarQubeEnv('SonarQube') {   // Jenkins Sonar name
+                    sh """
+                    mvn sonar:sonar \
+                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                    -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                    -Dsonar.projectVersion=${SONAR_PROJECT_VERSION}
+                    """
                 }
             }
         }
 
-        stage('Deploy DEV') {
+        stage('Quality Gate') {
             steps {
-                bat 'docker-compose -f docker-compose.dev.yml up -d --build'
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
-                bat 'mvn -f selenium-demo/pom.xml clean test'
+                dir('selenium-demo') {
+                    sh 'mvn clean test'
+                }
             }
         }
 
-        stage('Deploy PROD') {
+        stage('Docker Build') {
             steps {
-                bat 'docker-compose -f docker-compose.prod.yml up -d --build'
+                sh 'docker-compose -f docker-compose.prod.yml build'
+            }
+        }
+
+        stage('Docker Deploy') {
+            steps {
+                sh 'docker-compose -f docker-compose.prod.yml up -d'
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline completed successfully'
+            echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo '❌ Pipeline failed'
+            echo "❌ Pipeline failed"
         }
     }
 }
