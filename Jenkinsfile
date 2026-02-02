@@ -2,12 +2,12 @@ pipeline {
     agent any
 
     tools {
-        maven 'M3'        // must match Jenkins Global Tool name
-        jdk 'jdk17'       // must match Jenkins Global Tool name
+        nodejs 'NodeJS'        // Jenkins → Global Tool Config → NodeJS
+        maven 'Maven'          // Jenkins → Global Tool Config → Maven
     }
 
     environment {
-        SONARQUBE_ENV = 'SonarQube'   // Jenkins → Configure System → SonarQube name
+        SONARQUBE_SERVER = 'SonarQube'   // Jenkins → SonarQube installations name
     }
 
     stages {
@@ -21,10 +21,8 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir('netflix-frontend') {
-                    sh '''
-                      npm install
-                      npm run build || true
-                    '''
+                    bat 'npm install'
+                    bat 'npm run build'
                 }
             }
         }
@@ -32,22 +30,19 @@ pipeline {
         stage('Build Backend') {
             steps {
                 dir('netflix-backend') {
-                    sh '''
-                      npm install
-                      npm run build || true
-                    '''
+                    bat 'npm install'
+                    bat 'npm run build'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh '''
-                      mvn -f selenium-demo/pom.xml sonar:sonar \
-                      -Dsonar.projectKey=netflix-devops-cicd \
-                      -Dsonar.projectName=netflix-devops-cicd \
-                      -Dsonar.sources=.
+                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                    bat '''
+                    mvn -f selenium-demo/pom.xml clean verify sonar:sonar ^
+                    -Dsonar.projectKey=netflix-devops-cicd ^
+                    -Dsonar.projectName=netflix-devops-cicd
                     '''
                 }
             }
@@ -55,31 +50,29 @@ pipeline {
 
         stage('Deploy DEV') {
             steps {
-                sh 'docker-compose -f docker-compose.dev.yml up -d --build'
+                bat 'docker-compose -f docker-compose.dev.yml up -d --build'
             }
         }
 
         stage('Selenium UI Tests') {
             steps {
-                dir('selenium-demo') {
-                    sh 'mvn clean test'
-                }
+                bat 'mvn -f selenium-demo/pom.xml clean test'
             }
         }
 
         stage('Deploy PROD') {
             steps {
-                sh 'docker-compose -f docker-compose.prod.yml up -d --build'
+                bat 'docker-compose -f docker-compose.prod.yml up -d --build'
             }
         }
     }
 
     post {
-        always {
-            echo 'Pipeline completed'
+        success {
+            echo '✅ Pipeline completed successfully'
         }
         failure {
-            echo 'Pipeline failed'
+            echo '❌ Pipeline failed'
         }
     }
 }
